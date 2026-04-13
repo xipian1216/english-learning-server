@@ -1,6 +1,2 @@
-def main():
-    print("Hello from english-learning-server!")
+from app.main import app
 
-
-if __name__ == "__main__":
-    main()
