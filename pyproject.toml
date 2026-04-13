@@ -4,4 +4,17 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "email-validator>=2.2.0",
+    "fastapi[standard]>=0.135.3",
+    "pyjwt>=2.10.1",
+    "openai>=2.31.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.13.1",
+    "psycopg[binary]>=3.2.9",
+    "sqlmodel>=0.0.38",
+    "pytest>=9.0.3",
+]
+
+[tool.uv]
+package = false
