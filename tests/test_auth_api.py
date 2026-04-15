@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
+import sys
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.main import app
 
@@ -59,3 +63,8 @@ def test_auth_flow() -> None:
     )
     assert change_password_response.status_code == 200
     assert change_password_response.json()["data"] == {"updated": True}
+
+
+if __name__ == "__main__":
+    test_auth_flow()
+    print("Auth API test passed.")

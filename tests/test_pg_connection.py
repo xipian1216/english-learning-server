@@ -1,4 +1,10 @@
+import os
+from pathlib import Path
+import sys
+
 from sqlmodel import Field, Session, SQLModel, create_engine
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class Hero(SQLModel, table=True):
@@ -13,7 +19,8 @@ hero_2 = Hero(name="Spider-Boy", secret_name="Pedro Parqueador")
 hero_3 = Hero(name="Rusty-Man", secret_name="Tommy Sharp", age=48)
 
 
-engine = create_engine("postgresql+psycopg://xipian1216:1216@localhost:5432/testdb")
+database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://username:password@localhost:5432/testdb")
+engine = create_engine(database_url)
 
 
 SQLModel.metadata.create_all(engine)
@@ -23,3 +30,7 @@ with Session(engine) as session:
     session.add(hero_2)
     session.add(hero_3)
     session.commit()
+
+
+if __name__ == "__main__":
+    print("PostgreSQL connection test passed.")

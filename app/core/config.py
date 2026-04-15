@@ -10,6 +10,16 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, alias="APP_DEBUG")
     database_echo: bool = Field(default=False, alias="APP_DATABASE_ECHO")
     auto_create_tables: bool = Field(default=True, alias="APP_AUTO_CREATE_TABLES")
+    dictionary_api_base_url: str = Field(
+        default="https://api.dictionaryapi.dev/api/v2/entries/en",
+        alias="APP_DICTIONARY_API_BASE_URL",
+    )
+    youdao_app_key: str | None = Field(default=None, alias="YOUDAO_APP_KEY")
+    youdao_app_secret: str | None = Field(default=None, alias="YOUDAO_APP_SECRET")
+    youdao_api_base_url: str = Field(
+        default="https://openapi.youdao.com/api",
+        alias="YOUDAO_API_BASE_URL",
+    )
     secret_key: str = Field(default="dev-secret-key-change-me", alias="APP_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="APP_JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default=60, alias="APP_ACCESS_TOKEN_EXPIRE_MINUTES")
