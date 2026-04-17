@@ -11,3 +11,5 @@ wheels/
 
 # Local environment files
 .env
+
+fix_docs/
