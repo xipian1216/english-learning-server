@@ -1,11 +1,5 @@
-import json
-import socket
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
-
 from app.core.config import get_settings
-from app.core.exceptions import AppError
+from app.clients.dictionary_api_client import fetch_dictionary_entries
 from app.schemas.dictionary import (
     DictionaryDefinitionPayload,
     DictionaryEntryPayload,
@@ -13,56 +7,17 @@ from app.schemas.dictionary import (
     DictionaryPhoneticPayload,
 )
 
-DEFAULT_REQUEST_HEADERS = {
-    "Accept": "application/json",
-    "User-Agent": "english-learning-server/0.1",
-}
-
 
 def lookup_word(word: str) -> list[DictionaryEntryPayload]:
     normalized_word = word.strip().lower()
     if not normalized_word:
+        from app.core.exceptions import AppError
+
         raise AppError(status_code=400, code=40001, message="word is required")
 
     settings = get_settings()
-    request_url = f"{settings.dictionary_api_base_url}/{quote(normalized_word)}"
-    request = Request(request_url, headers=DEFAULT_REQUEST_HEADERS, method="GET")
-
-    try:
-        with urlopen(request, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code == 404:
-            raise AppError(status_code=404, code=40400, message="word not found") from exc
-        raise AppError(
-            status_code=502,
-            code=50200,
-            message=f"dictionary provider http error: {exc.code}",
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise AppError(status_code=502, code=50200, message="dictionary provider response invalid") from exc
-    except TimeoutError as exc:
-        raise AppError(status_code=502, code=50200, message="dictionary provider timeout") from exc
-    except URLError as exc:
-        reason = exc.reason
-        if isinstance(reason, socket.timeout):
-            raise AppError(status_code=502, code=50200, message="dictionary provider timeout") from exc
-        raise AppError(status_code=502, code=50200, message="dictionary provider network error") from exc
-
-    if isinstance(payload, dict):
-        title = payload.get("title")
-        message = payload.get("message")
-        if title or message:
-            raise AppError(
-                status_code=502,
-                code=50200,
-                message=f"dictionary provider bad response: {title or message}",
-            )
-
-    if not isinstance(payload, list):
-        raise AppError(status_code=502, code=50200, message="dictionary provider response invalid")
-
-    return [build_dictionary_entry(item) for item in payload if isinstance(item, dict)]
+    payload = fetch_dictionary_entries(settings.dictionary_api_base_url, normalized_word)
+    return [build_dictionary_entry(item) for item in payload]
 
 
 def build_dictionary_entry(item: dict) -> DictionaryEntryPayload:

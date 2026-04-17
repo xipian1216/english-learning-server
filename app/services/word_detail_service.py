@@ -1,7 +1,8 @@
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.exceptions import AppError
-from app.db.models import DictionaryEntry, DictionaryExample, DictionarySense
+from app.db.models import DictionaryEntry
+from app.repositories.dictionary_repository import get_cached_dictionary_entry, get_cached_examples, get_cached_senses, save_word_detail_to_cache
 from app.schemas.translation import TranslationCreateRequest
 from app.schemas.word_detail import (
     WordDetailCollocationPayload,
@@ -12,7 +13,6 @@ from app.schemas.word_detail import (
     WordDetailSensePayload,
     WordDetailSourcePayload,
 )
-from app.services.dictionary_cache_service import get_cached_dictionary_entry, save_word_detail_to_cache
 from app.services.dictionary_service import lookup_word
 from app.services.translation_service import translate_text
 
@@ -126,8 +126,8 @@ def build_word_detail_from_cache(
     cached_entry: DictionaryEntry,
     session: Session,
 ) -> WordDetailPayload:
-    senses_statement = select(DictionarySense).where(DictionarySense.entry_id == cached_entry.id).order_by(DictionarySense.sense_order)
-    examples_statement = select(DictionaryExample).where(DictionaryExample.entry_id == cached_entry.id).order_by(DictionaryExample.example_order)
+    cached_senses = get_cached_senses(session, cached_entry.id)
+    cached_examples = get_cached_examples(session, cached_entry.id)
     senses = [
         WordDetailSensePayload(
             part_of_speech=sense.part_of_speech,
@@ -135,14 +135,14 @@ def build_word_detail_from_cache(
             definition_zh=sense.definition_zh,
             short_definition=sense.short_definition,
         )
-        for sense in session.exec(senses_statement).all()
+        for sense in cached_senses
     ]
     examples = [
         WordDetailExamplePayload(
             sentence_en=example.sentence_en,
             sentence_zh=example.sentence_zh,
         )
-        for example in session.exec(examples_statement).all()
+        for example in cached_examples
     ]
 
     return WordDetailPayload(

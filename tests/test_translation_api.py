@@ -51,7 +51,7 @@ def test_create_translation_success() -> None:
     }
     """
 
-    with patch("app.services.translation_service.urlopen", return_value=MockHTTPResponse(response_payload)):
+    with patch("app.clients.youdao_client.urlopen", return_value=MockHTTPResponse(response_payload)):
         client = TestClient(app)
         response = client.post(
             "/api/v1/translations",
@@ -70,7 +70,7 @@ def test_create_translation_success() -> None:
 
 
 def test_create_translation_timeout_error() -> None:
-    with patch("app.services.translation_service.urlopen", side_effect=URLError(socket.timeout("timed out"))):
+    with patch("app.clients.youdao_client.urlopen", side_effect=URLError(socket.timeout("timed out"))):
         client = TestClient(app)
         response = client.post(
             "/api/v1/translations",
@@ -94,7 +94,7 @@ def test_create_translation_http_error() -> None:
         fp=None,
     )
 
-    with patch("app.services.translation_service.urlopen", side_effect=http_error):
+    with patch("app.clients.youdao_client.urlopen", side_effect=http_error):
         client = TestClient(app)
         response = client.post(
             "/api/v1/translations",

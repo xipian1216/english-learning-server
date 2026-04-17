@@ -164,8 +164,8 @@ def test_vocabulary_item_can_bootstrap_dictionary_entry() -> None:
 
     with patch("app.api.deps.decode_access_token", return_value={"sub": str(user.id), "type": "access"}), patch(
         "app.api.deps.get_user_by_id", return_value=user
-    ), patch("app.services.dictionary_service.urlopen") as mock_dictionary_urlopen, patch(
-        "app.services.translation_service.urlopen"
+    ), patch("app.clients.dictionary_api_client.urlopen") as mock_dictionary_urlopen, patch(
+        "app.clients.youdao_client.urlopen"
     ) as mock_translation_urlopen:
         class MockResponse:
             def __init__(self, payload: str):

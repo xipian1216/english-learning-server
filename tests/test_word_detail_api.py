@@ -49,8 +49,8 @@ def test_word_detail_success() -> None:
     translation_payload = {"translation": ["承诺", "投入", "提交"], "errorCode": "0"}
     sentence_translation_payload = {"translation": ["她承诺每天学习英语。"], "errorCode": "0"}
 
-    with patch("app.services.dictionary_service.urlopen") as mock_dictionary_urlopen, patch(
-        "app.services.translation_service.urlopen"
+    with patch("app.clients.dictionary_api_client.urlopen") as mock_dictionary_urlopen, patch(
+        "app.clients.youdao_client.urlopen"
     ) as mock_translation_urlopen, patch("app.api.deps.decode_access_token", return_value={"sub": "00000000-0000-0000-0000-000000000001", "type": "access"}), patch(
         "app.api.deps.get_user_by_id"
     ) as mock_get_user_by_id:
@@ -122,8 +122,8 @@ def test_word_detail_writes_cache() -> None:
     ]
     translation_payload = {"translation": ["承诺"], "errorCode": "0"}
 
-    with patch("app.services.dictionary_service.urlopen") as mock_dictionary_urlopen, patch(
-        "app.services.translation_service.urlopen"
+    with patch("app.clients.dictionary_api_client.urlopen") as mock_dictionary_urlopen, patch(
+        "app.clients.youdao_client.urlopen"
     ) as mock_translation_urlopen, patch("app.api.deps.decode_access_token", return_value={"sub": "00000000-0000-0000-0000-000000000001", "type": "access"}), patch(
         "app.api.deps.get_user_by_id"
     ) as mock_get_user_by_id:

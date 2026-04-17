@@ -66,5 +66,6 @@ def test_auth_flow() -> None:
 
 
 if __name__ == "__main__":
+    require_database_url()
     test_auth_flow()
     print("Auth API test passed.")

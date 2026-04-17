@@ -41,7 +41,7 @@ def test_dictionary_lookup_success() -> None:
     ]
     """
 
-    with patch("app.services.dictionary_service.urlopen", return_value=MockHTTPResponse(response_payload)):
+    with patch("app.clients.dictionary_api_client.urlopen", return_value=MockHTTPResponse(response_payload)):
         client = TestClient(app)
         response = client.get("/api/v1/dictionary/entries/hello")
 

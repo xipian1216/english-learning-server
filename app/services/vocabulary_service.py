@@ -1,22 +1,24 @@
 from uuid import UUID
+from typing import cast
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.exceptions import AppError
-from app.db.models import DictionaryEntry, DictionarySense, User, UserVocabularyItem
+from app.db.models import DictionaryEntry, User, UserVocabularyItem
+from app.repositories.vocabulary_repository import (
+    get_dictionary_entry_by_normalized_word,
+    get_existing_vocabulary_item,
+    get_first_dictionary_sense,
+    get_user_vocabulary_item,
+    list_user_vocabulary_items as list_user_vocabulary_rows,
+)
 from app.schemas.vocabulary import VocabularyItemCreateRequest, VocabularyItemPayload, VocabularyItemUpdateRequest
-from app.services.word_detail_service import build_word_detail, normalize_text
 from app.schemas.word_detail import WordDetailRequest
+from app.services.word_detail_service import build_word_detail, normalize_text
 
 
 def list_user_vocabulary_items(session: Session, user: User) -> list[VocabularyItemPayload]:
-    statement = (
-        select(UserVocabularyItem, DictionaryEntry)
-        .join(DictionaryEntry, DictionaryEntry.id == UserVocabularyItem.dictionary_entry_id)
-        .where(UserVocabularyItem.user_id == user.id)
-        .order_by(UserVocabularyItem.created_at.desc())
-    )
-    rows = session.exec(statement).all()
+    rows = list_user_vocabulary_rows(session, user)
     return [build_vocabulary_payload(session, item, entry) for item, entry in rows]
 
 
@@ -43,11 +45,7 @@ def create_vocabulary_item(
         if not dictionary_entry:
             raise AppError(status_code=404, code=40400, message="dictionary entry not found")
 
-    statement = select(UserVocabularyItem).where(
-        UserVocabularyItem.user_id == user.id,
-        UserVocabularyItem.dictionary_entry_id == dictionary_entry.id,
-    )
-    existing_item = session.exec(statement).first()
+    existing_item = get_existing_vocabulary_item(session, user, dictionary_entry.id)
 
     if existing_item:
         existing_item.selected_text = payload.text
@@ -60,15 +58,12 @@ def create_vocabulary_item(
         session.refresh(existing_item)
         return build_vocabulary_payload(session, existing_item, dictionary_entry)
 
-    item = UserVocabularyItem(
-        user_id=user.id,
-        dictionary_entry_id=dictionary_entry.id,
-        selected_text=payload.text,
-        source_sentence=payload.source_sentence,
-        source_url=payload.source_url,
-        source_title=payload.source_title,
-        note=payload.note,
-    )
+    item = cast(UserVocabularyItem, UserVocabularyItem(user_id=user.id, dictionary_entry_id=dictionary_entry.id))
+    item.selected_text = payload.text
+    item.source_sentence = payload.source_sentence
+    item.source_url = payload.source_url
+    item.source_title = payload.source_title
+    item.note = payload.note
     session.add(item)
     session.commit()
     session.refresh(item)
@@ -82,6 +77,8 @@ def update_vocabulary_item(
     payload: VocabularyItemUpdateRequest,
 ) -> VocabularyItemPayload:
     item = get_user_vocabulary_item(session, user, item_id)
+    if not item:
+        raise AppError(status_code=404, code=40400, message="vocabulary item not found")
     if payload.status is not None:
         item.status = payload.status
     if payload.note is not None:
@@ -102,24 +99,10 @@ def update_vocabulary_item(
 
 def delete_vocabulary_item(session: Session, user: User, item_id: UUID) -> None:
     item = get_user_vocabulary_item(session, user, item_id)
-    session.delete(item)
-    session.commit()
-
-
-def get_user_vocabulary_item(session: Session, user: User, item_id: UUID) -> UserVocabularyItem:
-    statement = select(UserVocabularyItem).where(
-        UserVocabularyItem.id == item_id,
-        UserVocabularyItem.user_id == user.id,
-    )
-    item = session.exec(statement).first()
     if not item:
         raise AppError(status_code=404, code=40400, message="vocabulary item not found")
-    return item
-
-
-def get_dictionary_entry_by_normalized_word(session: Session, normalized_word: str) -> DictionaryEntry | None:
-    statement = select(DictionaryEntry).where(DictionaryEntry.normalized_word == normalized_word)
-    return session.exec(statement).first()
+    session.delete(item)
+    session.commit()
 
 
 def build_vocabulary_payload(
@@ -127,8 +110,7 @@ def build_vocabulary_payload(
     item: UserVocabularyItem,
     entry: DictionaryEntry,
 ) -> VocabularyItemPayload:
-    sense_statement = select(DictionarySense).where(DictionarySense.entry_id == entry.id).order_by(DictionarySense.sense_order)
-    first_sense = session.exec(sense_statement).first()
+    first_sense = get_first_dictionary_sense(session, entry.id)
     meaning_zh = None
     if first_sense:
         meaning_zh = first_sense.definition_zh or first_sense.short_definition
