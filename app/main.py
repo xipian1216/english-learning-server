@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -63,7 +64,15 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
         },
     )
 
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['http://localhost:5173'], # 只允许列表中的域名
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"], # 按需开放方法
+    allow_headers=["Content-Type", "Authorization"], # 按需开放头部
+    expose_headers=["X-Custom-Header"], # 可选：允许前端访问的自定义响应头
+    max_age=600 # 可选：预检请求缓存时间(秒)，减少OPTIONS请求
+)
 app.include_router(api_router)
 
 
