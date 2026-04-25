@@ -16,3 +16,7 @@ fix_docs/
 *.bat
 *.sh
 .syncignore
+exclude.list
+
+# vscode plugin
+.kilo
