@@ -13,3 +13,6 @@ wheels/
 .env
 
 fix_docs/
+*.bat
+*.sh
+.syncignore
