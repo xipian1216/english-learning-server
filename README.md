@@ -14,6 +14,8 @@ Key variables:
 - `APP_SECRET_KEY`: JWT signing key, required
 - `APP_AUTO_CREATE_TABLES`: disabled by default; enable only for local debugging
 - `APP_DATABASE_ECHO`: print SQL statements for debugging
+- `APP_CORS_DEV_ALLOW_ORIGINS`: comma-separated dev origins
+- `APP_CORS_PROD_ALLOW_ORIGINS`: comma-separated production origins
 - `APP_DICTIONARY_API_BASE_URL`: dictionaryapi.dev base URL
 - `APP_ACCESS_TOKEN_EXPIRE_MINUTES`: access token expiration time in minutes
 - `YOUDAO_APP_KEY` / `YOUDAO_APP_SECRET`: Youdao provider credentials
@@ -25,6 +27,21 @@ uv run fastapi dev main.py
 ```
 
 If `APP_SECRET_KEY` or `DATABASE_URL` is missing, the app now fails fast during startup.
+
+### CORS Configuration
+
+The backend now separates development and production CORS origins by environment:
+
+- when `APP_ENV=development`, it uses `APP_CORS_DEV_ALLOW_ORIGINS`
+- when `APP_ENV=production`, it uses `APP_CORS_PROD_ALLOW_ORIGINS`
+
+Example:
+
+```env
+APP_ENV=development
+APP_CORS_DEV_ALLOW_ORIGINS=http://localhost:5173
+APP_CORS_PROD_ALLOW_ORIGINS=https://your-frontend-domain.com
+```
 
 ### Initialize Database Tables
 

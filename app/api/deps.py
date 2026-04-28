@@ -4,6 +4,7 @@ from jwt import InvalidTokenError
 from sqlmodel import Session
 
 from app.core.exceptions import AppError
+from app.core.logging import bind_request_context
 from app.core.security import decode_access_token
 from app.db.models import User
 from app.db.session import get_session
@@ -32,5 +33,5 @@ def get_current_user(
     if user.status != "active":
         raise AppError(status_code=403, code=40300, message="account unavailable")
 
+    bind_request_context(user_id=str(user.id))
     return user
-

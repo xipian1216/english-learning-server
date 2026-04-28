@@ -1,5 +1,6 @@
 from app.core.config import get_settings
 from app.clients.dictionary_api_client import fetch_dictionary_entries
+from app.core.logging import get_logger
 from app.schemas.dictionary import (
     DictionaryDefinitionPayload,
     DictionaryEntryPayload,
@@ -8,16 +9,22 @@ from app.schemas.dictionary import (
 )
 
 
+logger = get_logger(__name__)
+
+
 def lookup_word(word: str) -> list[DictionaryEntryPayload]:
     normalized_word = word.strip().lower()
     if not normalized_word:
         from app.core.exceptions import AppError
 
+        logger.warning("dictionary lookup failed", extra={"reason": "empty_word"})
         raise AppError(status_code=400, code=40001, message="word is required")
 
     settings = get_settings()
     payload = fetch_dictionary_entries(settings.dictionary_api_base_url, normalized_word)
-    return [build_dictionary_entry(item) for item in payload]
+    entries = [build_dictionary_entry(item) for item in payload]
+    logger.info("dictionary lookup completed", extra={"word": normalized_word, "result_count": len(entries)})
+    return entries
 
 
 def build_dictionary_entry(item: dict) -> DictionaryEntryPayload:

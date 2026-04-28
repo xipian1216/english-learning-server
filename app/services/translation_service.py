@@ -3,12 +3,17 @@ from __future__ import annotations
 from app.clients.youdao_client import build_youdao_sign, request_translation, truncate_text
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.core.logging import get_logger
 from app.schemas.translation import TranslationCreateRequest, TranslationPayload
+
+
+logger = get_logger(__name__)
 
 
 def translate_text(payload: TranslationCreateRequest) -> TranslationPayload:
     settings = get_settings()
     if not settings.youdao_app_key or not settings.youdao_app_secret:
+        logger.error("translation failed", extra={"reason": "missing_provider_credentials"})
         raise AppError(status_code=500, code=50010, message="youdao credentials are not configured")
 
     raw_payload = request_translation(
@@ -22,6 +27,16 @@ def translate_text(payload: TranslationCreateRequest) -> TranslationPayload:
     )
 
     if raw_payload.get("errorCode") != "0":
+        logger.warning(
+            "translation provider returned error",
+            extra={
+                "provider": "youdao",
+                "provider_error_code": raw_payload.get("errorCode"),
+                "source_language": payload.source_language,
+                "target_language": payload.target_language,
+                "text_length": len(payload.text),
+            },
+        )
         raise AppError(
             status_code=502,
             code=50010,
@@ -30,8 +45,21 @@ def translate_text(payload: TranslationCreateRequest) -> TranslationPayload:
 
     translations = raw_payload.get("translation")
     if not isinstance(translations, list) or not all(isinstance(item, str) for item in translations):
+        logger.warning(
+            "translation provider response invalid",
+            extra={"provider": "youdao", "provider_error_code": raw_payload.get("errorCode")},
+        )
         raise AppError(status_code=502, code=50011, message="translation provider response invalid")
 
+    logger.info(
+        "translation completed",
+        extra={
+            "source_language": payload.source_language,
+            "target_language": payload.target_language,
+            "text_length": len(payload.text),
+            "translation_count": len(translations),
+        },
+    )
     return TranslationPayload(
         text=payload.text,
         source_language=payload.source_language,
