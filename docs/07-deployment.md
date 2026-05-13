@@ -1,51 +1,37 @@
 # 部署
 
-## 运行时要求
+## 当前状态
 
-- Python 3.12。
-- PostgreSQL。
-- `uv`。
-- Docker 镜像基于 `python:3.12-slim`。
+server 正处于重写准备阶段，部署方式需要在应用结构恢复后重新验证。
 
-## 环境变量
+## 本地运行目标
 
-核心变量来自 `.env.example`：
+README 中记录的历史运行方式：
 
-- `APP_NAME`：应用名称。
-- `APP_ENV`：`development` 或 `production`。
-- `APP_DEBUG`：FastAPI debug 开关。
-- `DATABASE_URL`：PostgreSQL 连接字符串，必填。
-- `APP_DATABASE_ECHO`：SQL 输出开关。
-- `APP_AUTO_CREATE_TABLES`：是否启动时自动建表，默认关闭。
-- `APP_SECRET_KEY`：JWT 签名密钥，必填。
-- `APP_JWT_ALGORITHM`：JWT 算法，默认 `HS256`。
-- `APP_ACCESS_TOKEN_EXPIRE_MINUTES`：access token 过期分钟数。
-- `APP_CORS_*`：CORS 配置。
-- `APP_DICTIONARY_API_BASE_URL`：词典 provider 地址。
-- `YOUDAO_APP_KEY` / `YOUDAO_APP_SECRET` / `YOUDAO_API_BASE_URL`：有道 provider 配置。
+```bash
+uv run fastapi dev main.py
+```
 
-## 构建流程
+当前旧 `app/` 已删除，因此该命令需要在重写应用入口后重新验证。
 
-- Docker 构建会复制整个仓库，执行 `uv sync --no-dev`。
-- 容器默认暴露 `8000`。
-- 容器启动命令为 `uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`。
+## 配置
 
-## 部署目标
+关键配置默认来自环境变量：
 
-- `deploy.sh` 默认远端为 `frp-pi:/home/pi/deploy/english-learning/english-learning-server`。
-- `dev.sh` 默认远端为 `frp-pi:/home/pi/dev/english-learning-server`。
-- 可通过 `REMOTE_NAME` 和 `REMOTE_PATH` 覆盖默认值。
+- `DATABASE_URL`
+- `APP_SECRET_KEY`
+- CORS 相关配置
+- OIDC/OAuth provider 配置
+- 词典、翻译和 agents 服务配置
 
-## CI/CD
+真实密钥不得写入源码或文档。
 
-当前仓库未发现 `.github/` CI 配置。
+## 数据库迁移
 
-## 回滚与恢复
-
-- TODO: 仓库未记录回滚流程。
-- TODO: 仓库未记录数据库备份、迁移回滚或恢复手册。
+使用 Alembic 管理迁移。重写阶段如果决定重建干净 schema，必须在对应 feature plan 中明确。
 
 ## 待确认问题
 
-- TODO: 远端 `docker-compose.yml` 是否由其他仓库或服务器维护。
-- TODO: 生产环境是否应在容器启动前执行 `alembic upgrade head`。
+- 是否继续使用现有 Dockerfile。
+- 是否需要 Docker Compose 管理 server、database、agents。
+- 生产环境 server 与 agents 的网络和鉴权方式。

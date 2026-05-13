@@ -1,29 +1,32 @@
 # 技术决策
 
-## 2026-05-06 - 使用 FastAPI 与分层后端结构
+## 2026-05-08 - Server 重写采用新文档基线
 
 ### 背景
 
-项目需要为英语学习前端提供认证、词典、翻译、单词详情和生词本等 HTTP API，同时保持后续扩展 AI 会话和复习能力的空间。
+旧 `app/` 和旧 docs 已被删除，server 需要重新建立后端代码结构和项目知识库。
 
 ### 决策
 
-使用 FastAPI 作为 Web 框架，并按 route、service、repository、model、schema、client 和 core 基础设施分层组织代码。
+以 `DEVELOPMENT_GUIDE.md` 和新的 `docs/` 作为重写基线。旧 README、旧测试和旧迁移可作为参考，但不直接代表当前实现事实。
 
 ### 影响
 
-该结构使 HTTP 协议、业务编排、数据库访问和外部 provider 调用边界清晰。后续新增功能应优先沿用现有分层，而不是把业务逻辑直接写入 route。
+- 后续功能必须先写 feature plan。
+- 已删除旧功能文档不会被自动恢复为 implemented 状态。
+- 重写时需要同步修复测试和文档。
 
-## 2026-05-06 - 使用 Alembic 管理数据库 schema
+## 2026-05-08 - Server 文档保留在子项目内
 
 ### 背景
 
-项目使用 PostgreSQL 和 SQLModel，需要可控地演进用户、词典、生词本、复习记录和 AI 会话等表结构。
+`english-learning` 是多项目工作区，server、agents、web、plugin 各自有不同职责和文档需求。
 
 ### 决策
 
-默认关闭 `APP_AUTO_CREATE_TABLES`，使用 Alembic 迁移管理 schema。自动建表仅适合本地调试。
+server 的项目状态、架构、功能计划和测试策略写入 `english-learning-server/docs/`。根目录文档只作为通用规则或跨项目入口。
 
 ### 影响
 
-开发者在修改模型后需要创建并运行迁移。生产和常规开发流程不应依赖应用启动时自动建表。
+- server 任务优先读取 server 内文档。
+- 跨项目任务再读取根级和其它子项目文档。

@@ -1,51 +1,37 @@
 # 编码规范
 
-## 语言和框架约定
+## 核心原则
 
-- 使用 Python 3.12 类型标注风格，例如 `str | None` 和 `list[str]`。
-- FastAPI route 使用 `response_model=APIResponse[...]`。
-- 请求和响应数据结构放在 `app/schemas/`。
-- 数据表模型使用 SQLModel，放在 `app/db/models/`。
-- 配置通过 `pydantic-settings` 和环境变量读取，不硬编码环境相关值。
+- 先理解，再修改。
+- 优先最小、聚焦的变更。
+- 不做无关重构。
+- 不硬编码密钥、令牌、环境地址。
+- 保持代码、测试和文档一致。
 
-## 文件组织
+## Python 与 FastAPI
 
-- HTTP route：`app/api/v1/routes/`。
-- 业务逻辑：`app/services/`。
-- 数据访问：`app/repositories/`。
-- 外部服务调用：`app/clients/`。
-- 数据库模型：`app/db/models/`。
-- 共享基础设施：`app/core/`。
-- 测试：`tests/`，按能力命名为 `test_*_api.py` 或具体模块测试。
+- 路由层保持薄，只处理 HTTP 语义和依赖注入。
+- 业务流程写在 service 层。
+- 数据库读写写在 repository 层。
+- 外部服务调用放在 integration 层。
+- 请求响应结构使用 Pydantic schema。
+- 错误通过统一异常和响应结构返回。
 
-## 命名规则
+## 数据库
 
-- API route 函数使用动作语义，例如 `register_user`、`create_translation`、`get_vocabulary_items`。
-- service 函数使用业务语义，例如 `translate_text`、`build_word_detail`、`create_vocabulary_item`。
-- 数据库表使用复数 snake_case，例如 `users`、`dictionary_entries`、`user_vocabulary_items`。
-- 环境变量使用 `APP_` 前缀；第三方 provider 凭证使用 provider 前缀，例如 `YOUDAO_`。
+- 使用 SQLAlchemy 2 async 作为重写目标。
+- 使用 Alembic 管理 schema 变化。
+- 不依赖自动建表作为正常开发流程。
+- 索引、唯一约束、外键、可空性必须在 feature plan 中说明。
 
-## 错误处理
+## 配置
 
-- 业务错误抛出 `AppError(status_code, code, message)`。
-- `app.main` 将 `AppError` 统一转换为 `{"code": ..., "message": ..., "data": null}`。
-- FastAPI 请求校验错误统一返回 `422`，业务 code 为 `40001`，并在 `data.errors` 中携带字段错误列表。
-- 未处理异常统一返回 `50000` 和 `internal server error`。
+- 使用 pydantic-settings 读取环境变量。
+- 缺少关键配置时应 fail fast。
+- `.env.example` 应随配置变化同步更新。
 
-## 日志
+## 第三方服务
 
-- 使用 `app.core.logging.get_logger()` 获取 logger。
-- provider 请求应记录 provider、耗时、失败原因或状态码。
-- 认证依赖会将 `user_id` 绑定到请求上下文。
-- 日志配置支持文本或 JSON 格式，由 `APP_LOG_JSON` 控制。
-
-## 依赖规则
-
-- 不新增依赖，除非有明确需求和理由。
-- 外部 HTTP 调用当前使用标准库 `urllib.request`。
-- 密码哈希使用 `passlib` 的 `pbkdf2_sha256`。
-- JWT 使用 `pyjwt`。
-
-## 待确认问题
-
-- TODO: 仓库中尚未定义 formatter、linter 或静态类型检查工具。
+- OIDC、词典、翻译、agents 调用都应封装为可替换 client。
+- 测试中使用 mock 或 fake client。
+- 日志不得输出 secret、token、密码或隐私敏感内容。

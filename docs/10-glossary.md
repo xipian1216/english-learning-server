@@ -1,37 +1,29 @@
 # 术语表
 
-## APIResponse
+## Server
 
-项目统一 API 响应结构，包含 `code`、`message` 和 `data`。
+`english-learning-server`，主后端服务。
 
-## AppError
+## Agents
 
-项目业务异常类型，由全局异常处理器转换为统一错误响应。
+`english-learning-agents`，独立 AI 服务，负责 LLM 相关能力。
 
-## Dictionary Entry
+## Feature Plan
 
-词典条目，对应 `dictionary_entries` 表，存储 lemma、normalized word、音标、音频和 provider 原始数据。
+功能开发前的计划文档，定义目标、非目标、API、数据模型、服务流程、错误处理、测试和验收标准。
 
-## Sense
+## OIDC / OAuth
 
-词义，对应 `dictionary_senses` 表，包含词性、英文释义、中文释义和短释义。
+第三方登录和身份认证相关协议。
 
-## Vocabulary Item
+## Integration
 
-用户生词本条目，对应 `user_vocabulary_items` 表，以用户和词典条目为唯一边界。
+外部服务封装层，例如 OIDC provider、词典服务、翻译服务或 agents client。
 
-## Word Detail
+## Repository
 
-单词详情聚合结果，结合词典释义、翻译、例句和缓存来源信息。
+数据库读写封装层。
 
-## Provider
+## Service
 
-外部服务供应方。当前实际使用 `dictionaryapi.dev` 和有道智云。
-
-## Review Record
-
-复习记录数据模型，对应 `review_records` 表。当前代码中未暴露 API。
-
-## AI Session
-
-AI 会话数据模型，对应 `ai_sessions` 和 `ai_messages` 表。当前代码中未暴露 API。
+业务流程和用例编排层。

@@ -1,53 +1,60 @@
 # 开发流程
 
-## 本地环境准备
+## 开发前阅读
 
-1. 安装 Python `>=3.12`。
-2. 安装 `uv`。
-3. 执行 `uv sync` 安装依赖。
-4. 执行 `cp .env.example .env` 并设置本地值。
-5. 确保 PostgreSQL 可访问，且 `DATABASE_URL` 指向目标数据库。
+非简单变更前，应优先阅读：
 
-## 常用命令
+1. [`../INSTRUCTIONS.md`](../INSTRUCTIONS.md)
+2. [`../DEVELOPMENT_GUIDE.md`](../DEVELOPMENT_GUIDE.md)
+3. [`01-project-status.md`](01-project-status.md)
+4. 与任务相关的 feature plan
 
-- 启动开发服务：`uv run fastapi dev main.py`。
-- 初始化或升级数据库：`uv run alembic upgrade head`。
-- 创建迁移：`uv run alembic revision --autogenerate -m "describe your change"`。
-- 运行全部测试：`uv run pytest`。
-- 运行单个测试文件：`uv run pytest tests/test_translation_api.py`。
-- Docker 镜像运行入口：`uv run uvicorn app.main:app --host 0.0.0.0 --port 8000`。
+## 标准流程
 
-## 开发过程
+1. 明确任务目标和范围。
+2. 阅读相关代码、配置、测试和文档。
+3. 如果是业务功能，先确认或编写 feature plan。
+4. 实现最小必要变更。
+5. 更新或新增测试。
+6. 运行相关验证。
+7. 更新文档和功能状态。
+8. 总结变更、验证方式和风险。
 
-1. 先阅读 `docs/01-project-status.md` 和任务相关文档。
-2. 检查受影响 route、schema、service、repository、model 和测试。
-3. 优先做最小聚焦变更，不进行无关重构。
-4. 修改公共 API、数据模型、配置或部署流程时同步更新 docs。
-5. 行为变化应新增或更新相关测试。
-6. 完成前运行最相关验证命令，并记录无法验证的限制。
+## Feature Plan 门禁
 
-## 功能文档流转
+每个业务功能开发前必须有单独 feature plan。
 
-- 计划功能放入 `docs/features/planned/`。
-- 开始开发时移动到 `docs/features/in-progress/` 并记录开发步骤、涉及文件和测试计划。
-- 功能实现且验证完成后移动到 `docs/features/implemented/`。
-- 功能状态变化时同步更新 `docs/features/README.md`、`docs/01-project-status.md` 和 `docs/releases/current.md`。
+feature plan 至少包含：
 
-## 文档维护过程
+- 目标。
+- 非目标。
+- API 设计。
+- 数据模型与迁移。
+- 服务流程。
+- 错误处理。
+- 测试场景。
+- 验收标准。
 
-- 只记录从代码、配置、README 或测试中确认的事实。
-- 不确定内容使用 `TODO:` 标记。
-- 避免在多个文档重复详细实现；使用链接指向具体功能文档。
-- 重要技术选择或架构取舍写入 `docs/09-decisions.md`。
+没有 feature plan 的业务功能不直接实现。
 
-## 发布过程
+## 文档状态流转
 
-- 当前仓库没有 CI/CD 配置。
-- `deploy.sh` 会将本地文件 rsync 到远端 `REMOTE_NAME` / `REMOTE_PATH`，然后在远端执行 `sudo docker compose down && sudo docker compose up --build -d`。
-- `dev.sh` 使用类似流程同步到远端开发路径。
-- TODO: 明确远端 `docker-compose.yml` 的来源和生产发布检查清单。
+推荐状态：
 
-## 待确认问题
+```text
+planned -> in-progress -> implemented
+```
 
-- TODO: 是否需要统一 lint、format 或 type check 命令。
-- TODO: 是否需要在仓库内维护 Docker Compose 或 CI/CD 配置。
+移动文档或更新状态前必须确认：
+
+- 用户明确要求维护 docs，或当前任务明确包含文档更新。
+- 实现状态真实。
+- 测试或验收结果来自真实执行或用户确认。
+
+## 常用验证
+
+```bash
+uv run pytest
+```
+
+重写早期如果测试暂不可运行，应在任务总结中说明原因，并提供下一步恢复测试的路径。

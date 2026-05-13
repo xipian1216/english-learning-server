@@ -2,46 +2,43 @@
 
 ## 版本号 / 版本代号
 
-`0.1.0`
+TODO: server 重写版本号尚未确定。
 
 ## 版本目标
 
-提供英语学习应用后端 MVP 能力，包括认证、查词、翻译、单词详情缓存和用户生词本。
+完成 server 重写基线，逐步实现认证、非 AI 学习功能和 agents 接入边界。
 
 ## 已纳入功能
 
-- [用户认证](../features/implemented/2026-05-06-auth-api.md)
-- [词典查询](../features/implemented/2026-05-06-dictionary-api.md)
-- [翻译](../features/implemented/2026-05-06-translation-api.md)
-- [单词详情聚合与缓存](../features/implemented/2026-05-06-word-detail-api.md)
-- [用户生词本](../features/implemented/2026-05-06-vocabulary-api.md)
+- Server 总体开发指南。
+- Server docs 文档体系。
 
 ## 开发中功能
 
-当前没有已确认处于开发中的功能。
+- 暂无。
 
 ## 计划纳入功能
 
-- [AI 教师会话 API](../features/planned/2026-05-06-ai-teacher-session-api.md)
-- [复习记录 API](../features/planned/2026-05-06-review-api.md)
+- 注册登录与第三方认证。
+- 非 AI 学习功能。
+- AI agents 接入边界。
 
 ## 已知问题
 
-- 部分测试需要真实 PostgreSQL 数据库和已迁移 schema。
-- `tests/test_pg_connection.py` 在导入时会写入测试数据，不适合作为长期自动化测试模式。
-- 部署脚本依赖远端 Docker Compose 配置，但仓库中未包含 compose 文件。
-- OpenAI 客户端为占位，AI 会话数据模型尚未暴露 API。
+- 旧 `app/` 已删除。
+- 旧测试暂不能代表当前可运行状态。
+- README 中部分旧 API 描述需要在重写后更新。
 
 ## 发布前检查
 
-- `uv run pytest`
-- `uv run alembic upgrade head`
-- 验证 `.env` 中 `DATABASE_URL`、`APP_SECRET_KEY`、CORS 和 provider 凭证。
-- 验证 `GET /healthz`。
-- TODO: 补充生产部署 smoke test 和回滚检查。
+- 新 `app/` 基础结构完成。
+- 认证 feature plan 完成并实现。
+- 非 AI 功能 feature plan 完成并实现。
+- 相关测试通过。
+- README、docs 和 `.env.example` 同步更新。
 
 ## 相关功能文档
 
-- `docs/features/README.md`
-- `docs/06-api-design.md`
-- `docs/07-deployment.md`
+- [`../features/planned/2026-05-08-auth-foundation.md`](../features/planned/2026-05-08-auth-foundation.md)
+- [`../features/planned/2026-05-08-non-ai-learning.md`](../features/planned/2026-05-08-non-ai-learning.md)
+- [`../features/planned/2026-05-08-agents-integration-boundary.md`](../features/planned/2026-05-08-agents-integration-boundary.md)
