@@ -2,7 +2,7 @@
 
 ## 已实现功能
 
-- 暂无。旧实现文档不作为当前已实现事实恢复。
+- [`planned/2026-05-13-auto-lookup-vocabulary.md`](planned/2026-05-13-auto-lookup-vocabulary.md)
 
 ## 开发中功能
 

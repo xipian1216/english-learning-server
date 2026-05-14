@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 from uuid import UUID, uuid4
+from urllib.error import URLError
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -195,7 +196,38 @@ def test_vocabulary_item_can_bootstrap_dictionary_entry() -> None:
         )
 
     assert response.status_code == 201
-    assert response.json()["data"]["word"] == unique_word
+    data = response.json()["data"]
+    assert data["word"] == unique_word
+    assert data["item"]["word"] == unique_word
+    assert data["lookup_status"] == "success"
+    assert data["word_detail"]["entry"]["senses"][0]["definition_zh"] == "导航；确定方向"
+
+
+def test_vocabulary_item_saves_when_lookup_fails() -> None:
+    unique_word = f"offline-{uuid4().hex[:8]}"
+    user = seed_user(UUID("00000000-0000-0000-0000-000000000105"), "usere@example.com")
+    clear_user_vocabulary_items(user.id)
+
+    from unittest.mock import patch
+
+    with patch("app.api.deps.decode_access_token", return_value={"sub": str(user.id), "type": "access"}), patch(
+        "app.api.deps.get_user_by_id", return_value=user
+    ), patch("app.clients.dictionary_api_client.urlopen", side_effect=URLError("offline")), patch(
+        "app.clients.youdao_client.urlopen", side_effect=URLError("offline")
+    ):
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/vocabulary-items",
+            json={"text": unique_word},
+            headers={"Authorization": "Bearer token-e"},
+        )
+
+    assert response.status_code == 201
+    data = response.json()["data"]
+    assert data["item"]["word"] == unique_word
+    assert data["item"]["dictionary_entry_id"] is None
+    assert data["lookup_status"] == "failed"
+    assert data["word_detail"]["entry"] is None
 
 
 def get_entry_normalized_word(entry_id: UUID) -> str:
@@ -208,4 +240,6 @@ def get_entry_normalized_word(entry_id: UUID) -> str:
 if __name__ == "__main__":
     test_vocabulary_items_are_isolated_by_user()
     test_vocabulary_item_update_and_delete()
+    test_vocabulary_item_can_bootstrap_dictionary_entry()
+    test_vocabulary_item_saves_when_lookup_fails()
     print("Vocabulary API tests passed.")

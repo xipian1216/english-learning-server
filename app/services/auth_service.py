@@ -1,58 +1,55 @@
-from app.core.exceptions import AppError
-from app.core.logging import get_logger
-from app.core.security import create_access_token, get_password_hash, verify_password
-from app.db.models import User
-from app.repositories.user_repository import create_user, get_user_by_email
-from app.schemas.auth import LoginRequest, SessionPayload, UserCreateRequest, UserPayload, UserWithTokenPayload
 from sqlmodel import Session
 
-
-logger = get_logger(__name__)
-
-
-def build_user_payload(user: User, profile_data: dict | None = None) -> UserPayload:
-    payload = UserPayload.model_validate(user).model_dump()
-    if profile_data:
-        payload.update(profile_data)
-    return UserPayload.model_validate(payload)
+from app.core.errors import ApiError
+from app.core.security import create_access_token, hash_password, verify_password
+from app.db.models import User
+from app.repositories.user_repository import create_user, get_user_by_email, update_user_password
 
 
-def register_user(session: Session, payload: UserCreateRequest) -> UserWithTokenPayload:
-    existing_user = get_user_by_email(session, payload.email)
-    if existing_user:
-        logger.warning("user registration failed", extra={"reason": "email_exists"})
-        raise AppError(status_code=409, code=40900, message="email already exists")
-
-    user = create_user(
-        session=session,
-        email=payload.email,
-        password_hash=get_password_hash(payload.password),
-        display_name=payload.display_name,
-    )
-    access_token, expires_in = create_access_token(subject=str(user.id))
-    logger.info("user registered", extra={"user_id": str(user.id)})
-    return UserWithTokenPayload(
-        user=build_user_payload(user),
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=expires_in,
-    )
+def register_user(session: Session, email: str, password: str, display_name: str | None) -> dict:
+    normalized_email = email.lower()
+    if get_user_by_email(session, normalized_email) is not None:
+        raise ApiError(status_code=409, code=1101, message="email already exists")
+    user = create_user(session, normalized_email, hash_password(password), display_name)
+    return build_auth_payload(user)
 
 
-def create_session(session: Session, payload: LoginRequest) -> SessionPayload:
-    user = get_user_by_email(session, payload.email)
-    if not user or not verify_password(payload.password, user.password_hash):
-        logger.warning("user login failed", extra={"reason": "invalid_credentials"})
-        raise AppError(status_code=401, code=40100, message="invalid email or password")
+def login_user(session: Session, email: str, password: str) -> dict:
+    user = get_user_by_email(session, email.lower())
+    if user is None or not verify_password(password, user.password_hash):
+        raise ApiError(status_code=401, code=1201, message="invalid email or password")
     if user.status != "active":
-        logger.warning("user login failed", extra={"user_id": str(user.id), "reason": "account_unavailable"})
-        raise AppError(status_code=403, code=40300, message="account unavailable")
+        raise ApiError(status_code=403, code=1003, message="account is not active")
+    return build_auth_payload(user)
 
-    access_token, expires_in = create_access_token(subject=str(user.id))
-    logger.info("user logged in", extra={"user_id": str(user.id)})
-    return SessionPayload(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=expires_in,
-        user=build_user_payload(user),
-    )
+
+def change_password(session: Session, user: User, old_password: str, new_password: str) -> None:
+    if not verify_password(old_password, user.password_hash):
+        raise ApiError(status_code=401, code=1301, message="old password is incorrect")
+    update_user_password(session, user, hash_password(new_password))
+
+
+def build_auth_payload(user: User) -> dict:
+    token, expires_in = create_access_token(user.id)
+    return {
+        "user": serialize_user(user),
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+    }
+
+
+def serialize_user(user: User) -> dict:
+    profile = getattr(user, "profile", None)
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "status": user.status,
+        "created_at": user.created_at.isoformat(),
+        "profile": {
+            "english_level": profile.english_level if profile else None,
+            "learning_goal": profile.learning_goal if profile else None,
+            "preferred_explanation_language": profile.preferred_explanation_language if profile else "zh",
+        },
+    }

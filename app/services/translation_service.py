@@ -1,72 +1,35 @@
-from __future__ import annotations
+import hashlib
+import socket
+from urllib.error import HTTPError, URLError
 
-from app.clients.youdao_client import build_youdao_sign, request_translation, truncate_text
-from app.core.config import get_settings
-from app.core.exceptions import AppError
-from app.core.logging import get_logger
-from app.schemas.translation import TranslationCreateRequest, TranslationPayload
-
-
-logger = get_logger(__name__)
+from app.clients.youdao_client import translate_text
+from app.core.errors import ApiError
 
 
-def translate_text(payload: TranslationCreateRequest) -> TranslationPayload:
-    settings = get_settings()
-    if not settings.youdao_app_key or not settings.youdao_app_secret:
-        logger.error("translation failed", extra={"reason": "missing_provider_credentials"})
-        raise AppError(status_code=500, code=50010, message="youdao credentials are not configured")
-
-    raw_payload = request_translation(
-        base_url=settings.youdao_api_base_url,
-        app_key=settings.youdao_app_key,
-        app_secret=settings.youdao_app_secret,
-        text=payload.text,
-        source_language=payload.source_language,
-        target_language=payload.target_language,
-        vocab_id=payload.vocab_id,
-    )
-
-    if raw_payload.get("errorCode") != "0":
-        logger.warning(
-            "translation provider returned error",
-            extra={
-                "provider": "youdao",
-                "provider_error_code": raw_payload.get("errorCode"),
-                "source_language": payload.source_language,
-                "target_language": payload.target_language,
-                "text_length": len(payload.text),
-            },
-        )
-        raise AppError(
-            status_code=502,
-            code=50010,
-            message=f"translation provider request failed: {raw_payload.get('errorCode')}",
-        )
-
-    translations = raw_payload.get("translation")
-    if not isinstance(translations, list) or not all(isinstance(item, str) for item in translations):
-        logger.warning(
-            "translation provider response invalid",
-            extra={"provider": "youdao", "provider_error_code": raw_payload.get("errorCode")},
-        )
-        raise AppError(status_code=502, code=50011, message="translation provider response invalid")
-
-    logger.info(
-        "translation completed",
-        extra={
-            "source_language": payload.source_language,
-            "target_language": payload.target_language,
-            "text_length": len(payload.text),
-            "translation_count": len(translations),
-        },
-    )
-    return TranslationPayload(
-        text=payload.text,
-        source_language=payload.source_language,
-        target_language=payload.target_language,
-        translations=translations,
-        raw=raw_payload,
-    )
+def truncate_text(text: str) -> str:
+    if len(text) <= 20:
+        return text
+    return f"{text[:10]}{len(text)}{text[-10:]}"
 
 
-__all__ = ["build_youdao_sign", "translate_text", "truncate_text"]
+def build_youdao_sign(app_key: str, text: str, salt: str, curtime: str, app_secret: str) -> str:
+    raw = f"{app_key}{truncate_text(text)}{salt}{curtime}{app_secret}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def create_translation(text: str, source_language: str = "en", target_language: str = "zh-CHS") -> dict:
+    try:
+        payload = translate_text(text, source_language, target_language)
+    except HTTPError as exc:
+        raise ApiError(status_code=502, code=3004, message=f"translation provider http error: {exc.code}") from exc
+    except URLError as exc:
+        if isinstance(exc.reason, socket.timeout):
+            raise ApiError(status_code=502, code=3002, message="translation provider timeout") from exc
+        raise ApiError(status_code=502, code=3003, message="translation provider unavailable") from exc
+    except Exception as exc:
+        raise ApiError(status_code=502, code=3005, message="translation provider invalid response") from exc
+
+    if str(payload.get("errorCode")) != "0":
+        raise ApiError(status_code=502, code=3006, message="translation provider returned error")
+    translations = payload.get("translation") or []
+    return {"provider": "youdao", "query_text": text, "translations": translations, "raw_payload": payload}

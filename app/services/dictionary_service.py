@@ -1,70 +1,37 @@
-from app.core.config import get_settings
-from app.clients.dictionary_api_client import fetch_dictionary_entries
-from app.core.logging import get_logger
-from app.schemas.dictionary import (
-    DictionaryDefinitionPayload,
-    DictionaryEntryPayload,
-    DictionaryMeaningPayload,
-    DictionaryPhoneticPayload,
-)
+from urllib.error import HTTPError, URLError
+
+from app.clients.dictionary_api_client import lookup_dictionary_entries
+from app.core.errors import ApiError
 
 
-logger = get_logger(__name__)
+def lookup_entries(word: str) -> list[dict]:
+    try:
+        payload = lookup_dictionary_entries(word)
+    except HTTPError as exc:
+        raise ApiError(status_code=502, code=3101, message=f"dictionary provider http error: {exc.code}") from exc
+    except URLError as exc:
+        raise ApiError(status_code=502, code=3102, message="dictionary provider unavailable") from exc
+    except Exception as exc:
+        raise ApiError(status_code=502, code=3103, message="dictionary provider invalid response") from exc
+    return [serialize_provider_entry(entry) for entry in payload]
 
 
-def lookup_word(word: str) -> list[DictionaryEntryPayload]:
-    normalized_word = word.strip().lower()
-    if not normalized_word:
-        from app.core.exceptions import AppError
-
-        logger.warning("dictionary lookup failed", extra={"reason": "empty_word"})
-        raise AppError(status_code=400, code=40001, message="word is required")
-
-    settings = get_settings()
-    payload = fetch_dictionary_entries(settings.dictionary_api_base_url, normalized_word)
-    entries = [build_dictionary_entry(item) for item in payload]
-    logger.info("dictionary lookup completed", extra={"word": normalized_word, "result_count": len(entries)})
-    return entries
-
-
-def build_dictionary_entry(item: dict) -> DictionaryEntryPayload:
-    phonetics = []
-    for phonetic in item.get("phonetics", []):
-        if not isinstance(phonetic, dict):
-            continue
-        phonetics.append(
-            DictionaryPhoneticPayload(
-                text=phonetic.get("text"),
-                audio_url=phonetic.get("audio") or None,
-            )
-        )
-
+def serialize_provider_entry(entry: dict) -> dict:
     meanings = []
-    for meaning in item.get("meanings", []):
-        if not isinstance(meaning, dict):
-            continue
+    for meaning in entry.get("meanings") or []:
         definitions = []
-        for definition in meaning.get("definitions", []):
-            if not isinstance(definition, dict) or not definition.get("definition"):
-                continue
+        for definition in meaning.get("definitions") or []:
             definitions.append(
-                DictionaryDefinitionPayload(
-                    definition=definition["definition"],
-                    example=definition.get("example"),
-                )
+                {
+                    "definition": definition.get("definition"),
+                    "example": definition.get("example"),
+                }
             )
-        if definitions and meaning.get("partOfSpeech"):
-            meanings.append(
-                DictionaryMeaningPayload(
-                    part_of_speech=meaning["partOfSpeech"],
-                    definitions=definitions,
-                )
-            )
-
-    return DictionaryEntryPayload(
-        word=item.get("word", ""),
-        phonetic=item.get("phonetic"),
-        phonetics=phonetics,
-        meanings=meanings,
-        source_urls=[url for url in item.get("sourceUrls", []) if isinstance(url, str)],
-    )
+        meanings.append({"part_of_speech": meaning.get("partOfSpeech"), "definitions": definitions})
+    return {
+        "word": entry.get("word"),
+        "phonetic": entry.get("phonetic"),
+        "phonetics": entry.get("phonetics") or [],
+        "meanings": meanings,
+        "source_urls": entry.get("sourceUrls") or [],
+    }

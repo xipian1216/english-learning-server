@@ -1,36 +1,40 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import UUID
 
 import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 
 from app.core.config import get_settings
-
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+from app.core.errors import ApiError
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
-def create_access_token(*, subject: str) -> tuple[str, int]:
+def hash_password(password: str) -> str:
+    return password_context.hash(password)
+
+
+def verify_password(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+    return password_context.verify(password, password_hash)
+
+
+def create_access_token(user_id: UUID) -> tuple[str, int]:
     settings = get_settings()
     expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
-    now = datetime.now(timezone.utc)
-    expire_at = now + expires_delta
-    payload = {
-        "sub": subject,
-        "type": "access",
-        "iat": int(now.timestamp()),
-        "exp": int(expire_at.timestamp()),
-    }
+    expires_at = datetime.now(UTC) + expires_delta
+    payload: dict[str, Any] = {"sub": str(user_id), "type": "access", "exp": expires_at}
     token = jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
     return token, int(expires_delta.total_seconds())
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict[str, Any]:
     settings = get_settings()
-    return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    try:
+        return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    except PyJWTError as exc:
+        raise ApiError(status_code=401, code=1002, message="invalid access token") from exc

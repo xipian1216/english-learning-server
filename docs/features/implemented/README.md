@@ -11,3 +11,4 @@
 ## 当前已实现
 
 - [`../planned/2026-05-08-auth-foundation.md`](../planned/2026-05-08-auth-foundation.md)：认证基础接口，包括邮箱密码注册、邮箱密码登录、当前用户、修改密码、密码重置 API 形状预留和 Authentik OIDC API 形状预留。
+- [`../planned/2026-05-13-auto-lookup-vocabulary.md`](../planned/2026-05-13-auto-lookup-vocabulary.md)：加入生词本时自动查询词典和翻译，缓存可展示词条详情，并在 provider 失败时保留词本条目和 `lookup_status`。

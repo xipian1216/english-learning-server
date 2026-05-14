@@ -1,28 +1,3 @@
 from sqlmodel import SQLModel
 
-from app.db.models import (
-    AIMessage,
-    AISession,
-    DictionaryCollocation,
-    DictionaryEntry,
-    DictionaryExample,
-    DictionarySense,
-    ReviewRecord,
-    User,
-    UserProfile,
-    UserVocabularyItem,
-)
-
-__all__ = [
-    "AIMessage",
-    "AISession",
-    "DictionaryCollocation",
-    "DictionaryEntry",
-    "DictionaryExample",
-    "DictionarySense",
-    "ReviewRecord",
-    "User",
-    "UserProfile",
-    "UserVocabularyItem",
-    "SQLModel",
-]
+from app.db import models as models

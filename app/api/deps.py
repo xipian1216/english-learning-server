@@ -1,37 +1,43 @@
+from typing import Annotated
+from uuid import UUID
+
 from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
-from jwt import InvalidTokenError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 
-from app.core.exceptions import AppError
-from app.core.logging import bind_request_context
+from app.core.errors import ApiError
 from app.core.security import decode_access_token
 from app.db.models import User
 from app.db.session import get_session
-from app.services.user_service import get_user_by_id
+from app.repositories.user_repository import get_user_by_id
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/sessions")
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    session: Session = Depends(get_session),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    session: Annotated[Session, Depends(get_session)],
 ) -> User:
-    try:
-        payload = decode_access_token(token)
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-    except InvalidTokenError as exc:
-        raise AppError(status_code=401, code=40100, message="invalid token") from exc
+    if credentials is None:
+        raise ApiError(status_code=401, code=1001, message="missing access token")
 
-    if not user_id or token_type != "access":
-        raise AppError(status_code=401, code=40100, message="invalid token")
+    payload = decode_access_token(credentials.credentials)
+    if payload.get("type") != "access":
+        raise ApiError(status_code=401, code=1002, message="invalid access token")
+
+    subject = payload.get("sub")
+    if not subject:
+        raise ApiError(status_code=401, code=1002, message="invalid access token")
+
+    try:
+        user_id = UUID(str(subject))
+    except ValueError as exc:
+        raise ApiError(status_code=401, code=1002, message="invalid access token") from exc
 
     user = get_user_by_id(session, user_id)
-    if not user:
-        raise AppError(status_code=401, code=40100, message="invalid token")
+    if user is None:
+        raise ApiError(status_code=401, code=1002, message="invalid access token")
     if user.status != "active":
-        raise AppError(status_code=403, code=40300, message="account unavailable")
-
-    bind_request_context(user_id=str(user.id))
+        raise ApiError(status_code=403, code=1003, message="account is not active")
     return user

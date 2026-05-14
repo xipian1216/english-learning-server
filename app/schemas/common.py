@@ -1,12 +1,9 @@
-from typing import Generic, TypeVar
+from typing import Any
 
 from pydantic import BaseModel
 
-T = TypeVar("T")
 
-
-class APIResponse(BaseModel, Generic[T]):
+class ApiResponse(BaseModel):
     code: int = 0
     message: str = "ok"
-    data: T | None = None
-
+    data: Any = None

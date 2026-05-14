@@ -1,164 +1,186 @@
+from dataclasses import dataclass
+
 from sqlmodel import Session
 
-from app.core.exceptions import AppError
-from app.db.models import DictionaryEntry
-from app.repositories.dictionary_repository import get_cached_dictionary_entry, get_cached_examples, get_cached_senses, save_word_detail_to_cache
-from app.schemas.translation import TranslationCreateRequest
-from app.schemas.word_detail import (
-    WordDetailCollocationPayload,
-    WordDetailEntryPayload,
-    WordDetailExamplePayload,
-    WordDetailPayload,
-    WordDetailRequest,
-    WordDetailSensePayload,
-    WordDetailSourcePayload,
-)
-from app.services.dictionary_service import lookup_word
-from app.services.translation_service import translate_text
+from app.clients.dictionary_api_client import lookup_dictionary_entries
+from app.clients.youdao_client import translate_text
+from app.db.models import DictionaryEntry, DictionaryExample, DictionarySense, utc_now
+from app.repositories.learning_repository import get_dictionary_entry_by_normalized_word, get_entry_examples, get_entry_senses
+from app.schemas.learning import normalize_lookup_text
 
 
-def build_word_detail(session: Session, payload: WordDetailRequest) -> WordDetailPayload:
-    normalized_text = normalize_text(payload.text)
-    cached_entry = get_cached_dictionary_entry(session, normalized_text)
-    if cached_entry:
-        return build_word_detail_from_cache(payload, normalized_text, cached_entry, session)
+@dataclass
+class LookupResult:
+    word_detail: dict | None
+    lookup_status: str
+    cache_status: str
+    entry: DictionaryEntry | None
 
-    dictionary_entries = lookup_word(normalized_text)
-    if not dictionary_entries:
-        raise AppError(status_code=404, code=40400, message="word detail not found")
 
-    entry = dictionary_entries[0]
-    translation = translate_text(
-        TranslationCreateRequest(
-            text=normalized_text,
-            source_language=payload.source_language,
-            target_language=payload.target_language,
+def lookup_word_detail(
+    session: Session,
+    text: str,
+    source_language: str = "en",
+    target_language: str = "zh-CHS",
+    context_sentence: str | None = None,
+) -> LookupResult:
+    normalized_text = normalize_lookup_text(text)
+    cached_entry = get_dictionary_entry_by_normalized_word(session, normalized_text)
+    if cached_entry is not None:
+        return LookupResult(
+            word_detail=serialize_word_detail(session, cached_entry, text),
+            lookup_status="success",
+            cache_status="hit",
+            entry=cached_entry,
         )
-    )
 
-    translated_examples = build_examples(entry.meanings, payload.context_sentence, payload.source_language, payload.target_language)
-    senses = build_senses(entry.meanings, translation.translations)
+    dictionary_payload: list[dict] | None = None
+    translation_payload: dict | None = None
+    sentence_translation_payload: dict | None = None
+    dictionary_failed = False
+    translation_failed = False
 
-    word_detail_entry = WordDetailEntryPayload(
-        word=entry.word or normalized_text,
-        phonetic=entry.phonetic,
-        audio_url=next((item.audio_url for item in entry.phonetics if item.audio_url), None),
-        cefr_level=None,
-        senses=senses,
-        examples=translated_examples,
-        collocations=[],
-    )
-    save_word_detail_to_cache(
-        session,
-        normalized_text=normalized_text,
-        entry_payload=word_detail_entry,
-        provider="dictionaryapi+youdao",
-    )
+    try:
+        dictionary_payload = lookup_dictionary_entries(normalized_text)
+    except Exception:
+        dictionary_failed = True
 
-    return WordDetailPayload(
-        query_text=payload.text,
-        normalized_text=normalized_text,
-        lemma=entry.word or normalized_text,
-        source_language=payload.source_language,
-        target_language=payload.target_language,
-        entry=word_detail_entry,
-        source=WordDetailSourcePayload(provider="dictionaryapi+youdao", cached=False),
-    )
-
-
-def normalize_text(text: str) -> str:
-    normalized = text.strip().lower()
-    if not normalized:
-        raise AppError(status_code=400, code=40001, message="text is required")
-    return normalized
-
-
-def build_senses(meanings: list, translations: list[str]) -> list[WordDetailSensePayload]:
-    joined_translation = "；".join(translations) if translations else None
-    senses: list[WordDetailSensePayload] = []
-    for meaning in meanings:
-        if not meaning.definitions:
-            continue
-        first_definition = meaning.definitions[0]
-        senses.append(
-            WordDetailSensePayload(
-                part_of_speech=meaning.part_of_speech,
-                definition_en=first_definition.definition,
-                definition_zh=joined_translation,
-                short_definition=joined_translation,
-            )
-        )
-    return senses
-
-
-def build_examples(meanings: list, context_sentence: str | None, source_language: str, target_language: str) -> list[WordDetailExamplePayload]:
-    examples: list[WordDetailExamplePayload] = []
-    for meaning in meanings:
-        for definition in meaning.definitions:
-            if definition.example:
-                examples.append(WordDetailExamplePayload(sentence_en=definition.example, sentence_zh=None))
-                break
-        if examples:
-            break
+    try:
+        translation_payload = translate_text(text, source_language, target_language)
+    except Exception:
+        translation_failed = True
 
     if context_sentence:
-        translated_context = translate_text(
-            TranslationCreateRequest(
-                text=context_sentence,
-                source_language=source_language,
-                target_language=target_language,
+        try:
+            sentence_translation_payload = translate_text(context_sentence, source_language, target_language)
+        except Exception:
+            pass
+
+    if dictionary_failed and translation_failed:
+        return LookupResult(
+            word_detail={"query_text": text, "entry": None},
+            lookup_status="failed",
+            cache_status="miss",
+            entry=None,
+        )
+
+    entry = persist_dictionary_result(session, text, normalized_text, dictionary_payload, translation_payload, sentence_translation_payload)
+    lookup_status = "success" if not dictionary_failed and not translation_failed else "partial_failed"
+    return LookupResult(
+        word_detail=serialize_word_detail(session, entry, text),
+        lookup_status=lookup_status,
+        cache_status="miss",
+        entry=entry,
+    )
+
+
+def persist_dictionary_result(
+    session: Session,
+    text: str,
+    normalized_text: str,
+    dictionary_payload: list[dict] | None,
+    translation_payload: dict | None,
+    sentence_translation_payload: dict | None,
+) -> DictionaryEntry:
+    first_entry = dictionary_payload[0] if dictionary_payload else {}
+    display_word = first_entry.get("word") or text
+    phonetics = first_entry.get("phonetics") or []
+    audio_url = next((item.get("audio") for item in phonetics if item.get("audio")), None)
+    phonetic = first_entry.get("phonetic") or next((item.get("text") for item in phonetics if item.get("text")), None)
+    entry = DictionaryEntry(
+        lemma=normalized_text,
+        normalized_word=normalized_text,
+        display_word=display_word,
+        phonetic=phonetic,
+        audio_url=audio_url,
+        source_provider="dictionaryapi+youdao" if dictionary_payload and translation_payload else "partial",
+        raw_payload={"dictionary": dictionary_payload, "translation": translation_payload},
+        cached_at=utc_now(),
+        updated_at=utc_now(),
+    )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+
+    translations = translation_payload.get("translation") if translation_payload else None
+    definition_zh = "；".join(translations) if translations else None
+    example_translation = None
+    if sentence_translation_payload and sentence_translation_payload.get("translation"):
+        example_translation = sentence_translation_payload["translation"][0]
+
+    sense_order = 0
+    example_order = 0
+    for provider_entry in dictionary_payload or []:
+        for meaning in provider_entry.get("meanings") or []:
+            part_of_speech = meaning.get("partOfSpeech") or "unknown"
+            for definition in meaning.get("definitions") or []:
+                sense = DictionarySense(
+                    entry_id=entry.id,
+                    part_of_speech=part_of_speech,
+                    definition_en=definition.get("definition"),
+                    definition_zh=definition_zh,
+                    short_definition=definition_zh or definition.get("definition"),
+                    sense_order=sense_order,
+                )
+                session.add(sense)
+                session.commit()
+                session.refresh(sense)
+                if definition.get("example"):
+                    example = DictionaryExample(
+                        entry_id=entry.id,
+                        sense_id=sense.id,
+                        sentence_en=definition["example"],
+                        sentence_zh=example_translation,
+                        example_order=example_order,
+                    )
+                    session.add(example)
+                    example_order += 1
+                sense_order += 1
+
+    if not dictionary_payload and definition_zh:
+        session.add(
+            DictionarySense(
+                entry_id=entry.id,
+                part_of_speech="unknown",
+                definition_zh=definition_zh,
+                short_definition=definition_zh,
+                sense_order=0,
             )
         )
-        examples.insert(
-            0,
-            WordDetailExamplePayload(
-                sentence_en=context_sentence,
-                sentence_zh=translated_context.translations[0] if translated_context.translations else None,
-            ),
-        )
-
-    return examples
+    session.commit()
+    session.refresh(entry)
+    return entry
 
 
-def build_word_detail_from_cache(
-    payload: WordDetailRequest,
-    normalized_text: str,
-    cached_entry: DictionaryEntry,
-    session: Session,
-) -> WordDetailPayload:
-    cached_senses = get_cached_senses(session, cached_entry.id)
-    cached_examples = get_cached_examples(session, cached_entry.id)
-    senses = [
-        WordDetailSensePayload(
-            part_of_speech=sense.part_of_speech,
-            definition_en=sense.definition_en,
-            definition_zh=sense.definition_zh,
-            short_definition=sense.short_definition,
-        )
-        for sense in cached_senses
-    ]
-    examples = [
-        WordDetailExamplePayload(
-            sentence_en=example.sentence_en,
-            sentence_zh=example.sentence_zh,
-        )
-        for example in cached_examples
-    ]
-
-    return WordDetailPayload(
-        query_text=payload.text,
-        normalized_text=normalized_text,
-        lemma=cached_entry.lemma,
-        source_language=payload.source_language,
-        target_language=payload.target_language,
-        entry=WordDetailEntryPayload(
-            word=cached_entry.display_word,
-            phonetic=cached_entry.phonetic,
-            audio_url=cached_entry.audio_url,
-            cefr_level=cached_entry.cefr_level,
-            senses=senses,
-            examples=examples,
-            collocations=[],
-        ),
-        source=WordDetailSourcePayload(provider=cached_entry.source_provider, cached=True),
-    )
+def serialize_word_detail(session: Session, entry: DictionaryEntry, query_text: str) -> dict:
+    senses = get_entry_senses(session, entry.id)
+    examples = get_entry_examples(session, entry.id)
+    return {
+        "query_text": query_text,
+        "entry": {
+            "id": str(entry.id),
+            "word": entry.display_word,
+            "normalized_word": entry.normalized_word,
+            "phonetic": entry.phonetic,
+            "audio_url": entry.audio_url,
+            "source_provider": entry.source_provider,
+            "senses": [
+                {
+                    "id": str(sense.id),
+                    "part_of_speech": sense.part_of_speech,
+                    "definition_en": sense.definition_en,
+                    "definition_zh": sense.definition_zh,
+                    "short_definition": sense.short_definition,
+                }
+                for sense in senses
+            ],
+            "examples": [
+                {
+                    "id": str(example.id),
+                    "sentence_en": example.sentence_en,
+                    "sentence_zh": example.sentence_zh,
+                }
+                for example in examples
+            ],
+        },
+    }

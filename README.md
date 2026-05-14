@@ -74,6 +74,11 @@ The project uses `pbkdf2_sha256` via `passlib` for password hashing.
 - `POST /api/v1/sessions`: login and receive an access token
 - `GET /api/v1/users/me`: get current user profile via Bearer token
 - `PATCH /api/v1/users/me/password`: update current user password
+- `POST /api/v1/users/password-reset-requests`: reserved password reset request API; returns `501` until reset delivery is configured
+- `POST /api/v1/users/password-resets`: reserved password reset submit API; returns `501` until reset delivery is configured
+- `GET /api/v1/auth/oidc/authentik/login`: reserved Authentik OIDC login API; returns `503` until provider configuration is implemented
+- `GET /api/v1/auth/oidc/authentik/callback`: reserved Authentik OIDC callback API; returns `503` until provider configuration is implemented
+- `POST /api/v1/auth/oidc/authentik/sessions`: reserved Authentik login-code exchange API; returns `503` until provider configuration is implemented
 
 ### Dictionary API
 
@@ -85,11 +90,11 @@ The project uses `pbkdf2_sha256` via `passlib` for password hashing.
 
 ### Word Detail API
 
-- `POST /api/v1/word-details`: aggregate dictionary and translation data for word detail pages
+- `POST /api/v1/word-details`: authenticated lookup that returns `word_detail`, `lookup_status`, and `cache_status`, reusing cached dictionary entries when available
 
 ### Vocabulary API
 
 - `GET /api/v1/vocabulary-items`: list current user's vocabulary items
-- `POST /api/v1/vocabulary-items`: add a word to current user's vocabulary book
+- `POST /api/v1/vocabulary-items`: add a word to current user's vocabulary book, automatically lookup dictionary/translation detail, cache successful results, and return `item`, `word_detail`, and `lookup_status`
 - `PATCH /api/v1/vocabulary-items/{item_id}`: update status, note, or familiarity score
 - `DELETE /api/v1/vocabulary-items/{item_id}`: remove a word from current user's vocabulary book
