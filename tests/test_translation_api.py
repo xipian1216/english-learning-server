@@ -2,6 +2,7 @@ from pathlib import Path
 import socket
 import sys
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 from urllib.error import HTTPError, URLError
 
 from fastapi.testclient import TestClient
@@ -69,6 +70,54 @@ def test_create_translation_success() -> None:
     assert body["data"]["translations"] == ["承诺", "投入", "提交"]
 
 
+def test_translation_client_sends_youdao_auth_params() -> None:
+    from app.clients.youdao_client import build_youdao_sign, translate_text
+    from app.core.config import get_settings
+
+    class FixedUUID:
+        hex = "salt123"
+
+    response_payload = '{"errorCode":"0","query":"commit","translation":["提交"]}'
+
+    with patch("app.clients.youdao_client.uuid.uuid4", return_value=FixedUUID()), patch(
+        "app.clients.youdao_client.time.time", return_value=1713000000
+    ), patch("app.clients.youdao_client.urlopen", return_value=MockHTTPResponse(response_payload)) as mock_urlopen:
+        payload = translate_text("commit")
+
+    url = mock_urlopen.call_args.args[0]
+    query = parse_qs(urlparse(url).query)
+    assert payload["translation"] == ["提交"]
+    assert query["q"] == ["commit"]
+    assert query["from"] == ["en"]
+    assert query["to"] == ["zh-CHS"]
+    assert query["appKey"]
+    assert query["salt"] == ["salt123"]
+    assert query["signType"] == ["v3"]
+    assert query["curtime"] == ["1713000000"]
+    settings = get_settings()
+    assert query["sign"] == [
+        build_youdao_sign(settings.youdao_app_key, "commit", "salt123", "1713000000", settings.youdao_app_secret)
+    ]
+
+
+def test_create_translation_provider_error_includes_error_code() -> None:
+    response_payload = '{"errorCode":"108","query":"hello"}'
+
+    with patch("app.clients.youdao_client.urlopen", return_value=MockHTTPResponse(response_payload)):
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/translations",
+            json={
+                "text": "hello",
+                "source_language": "en",
+                "target_language": "zh-CHS",
+            },
+        )
+
+    assert response.status_code == 502
+    assert response.json()["message"] == "translation provider returned error: 108"
+
+
 def test_create_translation_timeout_error() -> None:
     with patch("app.clients.youdao_client.urlopen", side_effect=URLError(socket.timeout("timed out"))):
         client = TestClient(app)
@@ -113,6 +162,8 @@ if __name__ == "__main__":
     test_truncate_text()
     test_build_youdao_sign()
     test_create_translation_success()
+    test_translation_client_sends_youdao_auth_params()
+    test_create_translation_provider_error_includes_error_code()
     test_create_translation_timeout_error()
     test_create_translation_http_error()
     print("Translation API tests passed.")

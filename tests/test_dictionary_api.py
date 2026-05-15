@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from fastapi.testclient import TestClient
 
@@ -52,6 +53,47 @@ def test_dictionary_lookup_success() -> None:
     assert body["data"][0]["meanings"][0]["part_of_speech"] == "exclamation"
 
 
+def test_dictionary_client_sends_provider_headers() -> None:
+    from app.clients.dictionary_api_client import lookup_dictionary_entries
+
+    response_payload = '[{"word":"hello","meanings":[]}]'
+
+    with patch("app.clients.dictionary_api_client.urlopen", return_value=MockHTTPResponse(response_payload)) as mock_urlopen:
+        entries = lookup_dictionary_entries("hello")
+
+    request = mock_urlopen.call_args.args[0]
+    assert entries[0]["word"] == "hello"
+    assert request.get_header("Accept") == "application/json"
+    assert request.get_header("User-agent") == "english-learning-server/0.1 (+https://dictionaryapi.dev)"
+
+
+def test_dictionary_client_retries_403_with_browser_headers() -> None:
+    from app.clients.dictionary_api_client import lookup_dictionary_entries
+
+    response_payload = '[{"word":"hello","meanings":[]}]'
+    http_error = HTTPError(
+        url="https://api.dictionaryapi.dev/api/v2/entries/en/hello",
+        code=403,
+        msg="Forbidden",
+        hdrs=None,
+        fp=None,
+    )
+
+    with patch(
+        "app.clients.dictionary_api_client.urlopen",
+        side_effect=[http_error, MockHTTPResponse(response_payload)],
+    ) as mock_urlopen:
+        entries = lookup_dictionary_entries("hello")
+
+    retry_request = mock_urlopen.call_args_list[1].args[0]
+    assert entries[0]["word"] == "hello"
+    assert mock_urlopen.call_count == 2
+    assert retry_request.get_header("Referer") == "https://dictionaryapi.dev/"
+    assert "Mozilla/5.0" in retry_request.get_header("User-agent")
+
+
 if __name__ == "__main__":
     test_dictionary_lookup_success()
+    test_dictionary_client_sends_provider_headers()
+    test_dictionary_client_retries_403_with_browser_headers()
     print("Dictionary API test passed.")
