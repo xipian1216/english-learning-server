@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.learning import router as learning_router
+from app.api.system import router as system_router
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
         allow_headers=settings.get_cors_headers(),
     )
     install_error_handlers(application)
+    application.include_router(system_router)
     application.include_router(auth_router)
     application.include_router(learning_router)
     return application
